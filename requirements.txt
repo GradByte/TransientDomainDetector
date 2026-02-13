@@ -1,0 +1,26 @@
+# Transient Domain Detector - Dependencies
+
+# Core ML & Data Processing
+pandas>=1.5.0
+numpy>=1.23.0
+scikit-learn>=1.2.0
+joblib>=1.2.0
+
+# Spark & Streaming
+pyspark==3.5.0
+
+# Kafka
+kafka-python>=2.0.2
+
+# Elasticsearch (match server version)
+elasticsearch==8.11.0
+
+# WebSocket (for direct stream testing)
+websocket-client>=1.6.0
+
+# Logging & Utilities
+python-dotenv>=1.0.0
+
+# Optional: For development/testing
+pytest>=7.4.0
+requests>=2.31.0
