@@ -636,6 +636,12 @@ RECENT MALICIOUS DOMAINS (Top 20)
 3. Create index pattern: `transient-domains*`
 4. Explore your data with visualizations
 
+**Example Kibana Dashboard:**
+
+![Kibana Dashboard Example](exampleKibana.png)
+
+*The Kibana Discover interface showing classified domains with their predictions (benign/review/malicious), confidence scores, features, and timestamps. You can filter by prediction labels, search domains, and analyze patterns in real-time.*
+
 ### Option 3: Direct Elasticsearch Query
 
 ```bash
@@ -649,6 +655,8 @@ curl -X POST http://localhost:9200/transient-domains/_search?pretty \
 ```
 
 ## 🔍 Creating Kibana Dashboard
+
+For a detailed guide on setting up visualizations and dashboards, see [KIBANA_GUIDE.md](KIBANA_GUIDE.md). Below is a quick overview:
 
 1. **Access Kibana**: http://localhost:5601
 
