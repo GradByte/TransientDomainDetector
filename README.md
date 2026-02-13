@@ -2,26 +2,38 @@
 
 Real-time pre-screening and early warning system for potential transient domains - ultra-short-lived malicious domains that exist for less than 24 hours and evade traditional DNS monitoring. Provides first-line detection and risk assessment to enable comprehensive transient domain tracking.
 
+**Inspired by:** [DarkDNS: Revisiting the Value of Rapid Zone Update](https://doi.org/10.1145/3646547.3689021) (Sommese et al., IMC 2024)  
+**Data Source:** [OpenINTEL ZoneStream](https://openintel.nl/data/zonestream/) - Public feed of newly registered domains from CT logs
+
 ## 🎯 What Are Transient Domains?
 
-**Transient domains** are domain names that are registered and deleted within a 24-hour period, making them invisible to conventional security monitoring tools that rely on daily zone file snapshots.
+**Transient domains** are domain names that are registered and deleted within a 24-hour period, making them invisible to conventional security monitoring tools that rely on daily zone file snapshots (such as ICANN's CZDS - Centralized Zone Data Service).
 
-### Key Characteristics
+### Key Characteristics (from DarkDNS Research)
 
-- ⏱️ **Ultra-short-lived**: Exist for less than one day (often <6 hours)
-- 🚨 **Almost always malicious**: Used for phishing, spam, fraud, and other attacks
-- 👻 **Invisible**: Fall entirely between consecutive daily zone updates
-- 🔒 **Quickly removed**: Registrars delete them upon detecting abuse
-- 📊 **Significant blind spot**: Traditional threat intelligence misses most of them
+- ⏱️ **Ultra-short-lived**: Over 50% disappear within their first 6 hours of existence
+- 🚨 **Predominantly malicious**: Registrars confirm they are "mostly likely malicious" - used for phishing, spam, credit card fraud, and abuse
+- 👻 **Invisible to daily monitoring**: Fall entirely between consecutive 24-hour zone snapshots
+- 🔒 **Quickly removed**: Registrars delete them upon detecting abuse, suspicious payments, or fraud
+- 📊 **Massive blind spot**: Even with best available public data, only ~30% are detected
 
 ### The Problem
 
-Research shows that **tens of thousands** of transient domains are registered every month, with more than half disappearing within 6 hours. These domains represent a critical blind spot in cybersecurity:
+According to the **DarkDNS paper** (Sommese et al., IMC 2024):
 
-- Traditional DNS monitoring relies on **daily snapshots** and misses them entirely
-- Commercial threat intelligence feeds capture **only a fraction**
+- **68,042 transient domains** identified over just 3 months (Nov 2023 - Jan 2024)
+- **42,358 confirmed transient domains** after validation with RDAP data
+- **At least 1%** of newly registered domains are transient and never appear in CZDS snapshots
+- **Only 5%** of transient domains are caught by blocklists
+- **94%** of flagged transient domains appear on blocklists only **after deletion** (too late)
+- Even commercial passive DNS feeds (DomainTools SIE) combined with CT logs still miss significant portions
+
+**Critical Visibility Gap**:
+- Traditional DNS monitoring relies on **daily snapshots** and completely misses transient domains
+- Commercial threat intelligence captures only a **fraction** of them
 - Security teams have **no real-time visibility** into these threats
-- By the time they're detected, they're already gone
+- By the time they're detected (if ever), they're already gone
+- Each registrar independently fights the same threats as attackers move between registrars
 
 ### Our Solution
 
@@ -64,50 +76,79 @@ This system monitors newly registered domains from [**OpenINTEL's ZoneStream**](
 ### Architecture
 
 ```
-Certificate Transparency Logs
+Certificate Transparency Logs (Public, Worldwide)
          ↓
-OpenINTEL ZoneStream (Kafka) - Real-time newly registered domains
+OpenINTEL ZoneStream (Kafka) - Based on DarkDNS methodology
+[Detects ~42% of newly registered domains within 45 min median]
          ↓
    Spark Streaming - Process domains within seconds
          ↓
-  Feature Extraction - Analyze suspicious patterns
+  Feature Extraction - Extract 7 important domain features
          ↓
    ML Classification (Random Forest)
    ├─ Benign (Label 0): High-confidence legitimate
    ├─ Malicious (Label 1): Clear threat indicators
-   └─ Review (Label 2): Low-confidence, needs investigation
+   └─ Review (Label 2): Low-confidence (<80%), needs investigation
          ↓
     Elasticsearch - Store & index results
          ↓
   Kibana Dashboard - Real-time monitoring & alerts
+         ↓
+[Optional: Feed to zone monitoring + RDAP validation
+ to confirm transience per DarkDNS full workflow]
 ```
+
+**Detection Speed** (from DarkDNS research):
+- **50% of domains** detected within **45 minutes** of registration
+- **30% of domains** detected within **15 minutes** of registration
+- Varies by TLD (e.g., .com updates every 60s, others every 15-30 min)
 
 ### Why This Matters
 
-**Traditional DNS Monitoring** (Daily Snapshots):
+**Traditional DNS Monitoring** (Daily Snapshots - ICANN CZDS):
 - ❌ Updates every 24 hours
-- ❌ Misses domains that appear and disappear between snapshots
+- ❌ **Completely misses transient domains** that exist between snapshots
 - ❌ Reactive - domains are already used in attacks
-- ❌ Captures <50% of transient domains
+- ❌ **Misses at least 1%** of all newly registered domains (per DarkDNS research)
+
+**Blocklists** (Reactive Detection):
+- ❌ Flag only **5% of transient domains**
+- ❌ **94% of detections happen AFTER deletion** (too late to act)
+- ❌ Most transient domains never get detected at all
 
 **Our Real-Time Pre-Screening** (Certificate Transparency):
-- ✅ **First-line detection** within seconds of registration
+- ✅ **First-line detection** within seconds to minutes of registration
 - ✅ Flags suspicious domains that **may be** transient-like
 - ✅ Provides **early warning** for further investigation
 - ✅ Enables security teams/researchers to:
-  - Prioritize which domains to check in zone files
-  - Focus resources on high-risk domains
+  - Prioritize which domains to track in zone files
+  - Focus resources on high-risk domains (instead of monitoring all 6.8M+ monthly registrations)
   - Take proactive blocking actions based on risk scores
   - Feed into comprehensive transient domain tracking systems
 
-**Complete Transient Domain Detection Workflow**:
+**Complete Transient Domain Detection Workflow** (per DarkDNS):
 ```
-1. Our System → Flags suspicious domains in real-time (risk assessment)
-2. Zone File Monitoring → Confirms if flagged domains disappear <24h
-3. Action → Block/investigate confirmed transient domains
+1. CT Logs → Newly registered domains appear (public)
+2. Our System → ML-based risk assessment flags suspicious domains
+3. Zone File Monitoring → Track flagged domains to confirm <24h deletion
+4. RDAP Validation → Confirm registration/deletion timing
+5. Action → Block/investigate confirmed transient domains
 ```
 
-This system is the **first step** - providing a "heads up" to teams who have the infrastructure to confirm actual transience through zone file tracking.
+**Research Context**: The DarkDNS study showed that even combining CT logs with commercial passive DNS (DomainTools SIE) only detected **30% of transient domains** compared to registry ground truth. This system provides the critical **CT-based first layer** that security teams can use to prioritize their limited zone monitoring resources.
+
+**Detection Comparison** (from DarkDNS research):
+
+| Detection Method | Coverage | Speed | Cost | Transient Detection |
+|-----------------|----------|-------|------|---------------------|
+| **Daily Zone Files (CZDS)** | All participating TLDs | 24h delay | Free | **0%** - Completely blind |
+| **Blocklists** | Reported domains only | Hours-Days | Free | **5%**, 94% too late |
+| **Commercial Passive DNS** | Depends on coverage | Minutes-Hours | $$$ | ~30-40% (partial) |
+| **CT Logs (This System)** | All domains w/ certs | Seconds-Minutes | Free | First-line pre-screening |
+| **Registry Ground Truth** | Perfect (single TLD) | Real-time | N/A | **100%** (not accessible) |
+| **Ideal: RZU Service** | All domains | <5 minutes | TBD | **100%** (not available) |
+
+*Note: The DarkDNS .nl registry comparison (ground truth) found **334 transient domains** in 3 months. CT logs detected only **99 (29.6%)** of those. The remaining 70% had no certificates issued or issued too late.*
 
 ## 🎯 Use Cases & Impact
 
@@ -124,10 +165,16 @@ This system is the **first step** - providing a "heads up" to teams who have the
 
 ### Anti-Phishing & Fraud Prevention
 
-**Problem**: Transient domains are heavily used for:
-- Credit card fraud (collect payment, disappear)
-- Phishing campaigns (steal credentials, vanish)
-- Spam and scam operations (hit and run)
+**Problem**: Transient domains are heavily used for (confirmed by registrars in DarkDNS study):
+- **Credit card fraud** (collect payment, disappear before chargeback)
+- **Phishing campaigns** (steal credentials, vanish - average campaign: 21 hours)
+- **Spam and scam operations** (hit and run tactics)
+- **Account suspensions** (detected abuse, removed immediately)
+
+**DarkDNS Findings**: 
+- Registrars confirm transient domains are "mostly likely malicious" with rare legitimate exceptions
+- Reasons for early removal: abuse, account suspensions, credit card fraud
+- Legitimate cases (domain tasting, cancellation) are "exceptionally rare"
 
 **Solution**: Flag suspicious newly-registered domains for:
 - Email gateway filtering
@@ -137,15 +184,22 @@ This system is the **first step** - providing a "heads up" to teams who have the
 
 ### DNS Abuse Research
 
-**Problem**: Transient domains are understudied due to their ephemeral nature and the difficulty of tracking them.
+**Problem**: Transient domains are severely understudied due to their ephemeral nature and complete invisibility to daily zone snapshots.
+
+**Scale of the Problem** (DarkDNS findings):
+- **68,042 transient domains** identified in just 3 months
+- **~22,700 per month** on average (likely underestimate - only 30% detection rate)
+- **At least 1%** of all newly registered domains never appear in CZDS
+- **Each registrar fights independently** - same attackers move across registrars to evade detection
 
 **How This Helps**: Provides the **first layer** of transient domain research:
-- Identifies suspicious newly-registered domains in real-time
+- Identifies suspicious newly-registered domains in real-time from CT logs
 - Provides a **candidate list** for zone file monitoring systems
-- Reduces the search space for researchers (flag ~10% instead of checking 100% of domains)
+- Reduces the search space for researchers (flag ~10-15% instead of tracking all 6.8M+ monthly domains)
 - Enables researchers to focus zone file tracking on high-risk domains
-- Feeds into comprehensive transient domain tracking pipelines
+- Feeds into comprehensive transient domain tracking pipelines (CT → ML → Zone Files → RDAP)
 - Pattern analysis of characteristics common to suspicious short-lived domains
+- Enables collaboration across registrars to share threat signals
 
 ### Real-World Impact
 
@@ -157,10 +211,12 @@ This system is the **first step** - providing a "heads up" to teams who have the
 - 🔗 **Integration**: Feeds into comprehensive transient domain tracking systems
 
 **Typical Workflow**:
-1. **Our System** flags 10-15% of domains as suspicious
-2. **Security Team** investigates flagged domains or feeds them to zone monitoring
-3. **Zone File Tracking** confirms which flagged domains are actually transient
-4. **Action** taken on confirmed transient domains
+1. **Our System** flags suspicious domains in real-time (within seconds of CT log appearance)
+2. **Security Team** investigates flagged domains or feeds them to zone monitoring systems
+3. **Zone File Tracking** confirms which flagged domains are actually transient (disappear <24h)
+4. **Action** taken on confirmed transient domains (blocklisting, investigation, reporting)
+
+**Research Context**: According to the DarkDNS study, even combining multiple data sources (CT logs + passive DNS) only detects about 30% of transient domains. This system provides the critical **first layer** of detection from CT logs, which security teams can then validate and act upon.
 
 ---
 
@@ -368,10 +424,18 @@ Connects to [**OpenINTEL's ZoneStream**](https://openintel.nl/data/zonestream/) 
 
 **About OpenINTEL ZoneStream:**
 - Developed by the University of Twente's OpenINTEL project
+- **Public data feed** released by the DarkDNS research team (Sommese et al., IMC 2024)
 - Streams newly registered domains extracted from Certificate Transparency (CT) logs in real-time
+- Uses the **DarkDNS methodology**: monitors CT logs (via Certstream), filters domains not in CZDS snapshots
 - Kafka server: `kafka.zonestream.openintel.nl:9092`
-- Enables security researchers to monitor DNS infrastructure changes as they happen
+- Enables security researchers to detect domains within seconds to minutes of registration
 - Free and open for research purposes
+
+**Detection Coverage** (from DarkDNS research):
+- Detects **~42% of newly registered domains** (6.8M over 3 months)
+- Median detection time: **45 minutes** after registration
+- Only captures domains that obtain TLS certificates
+- Limitation: Misses domains without certificates (~58% of registrations)
 
 **Stream Data Format:**
 ```json
@@ -791,23 +855,45 @@ This system provides **risk assessment and early warning**, not definitive malic
 
 ## 📚 References & Research
 
-### Transient Domains Research
+### Primary Research: DarkDNS Paper
 
-This project addresses the "transient domain" problem identified in DNS security research:
+This project is inspired by and addresses the "transient domain" problem identified in:
 
-**Key Findings**:
-- Transient domains exist for less than 24 hours
-- Over 42,000 confirmed transient domains identified in 3 months
-- More than 50% disappear within 6 hours of registration
-- Almost exclusively associated with malicious activity (phishing, fraud, spam)
-- Traditional DNS monitoring (daily snapshots) completely misses them
-- Represents a significant blind spot in cybersecurity
+**Raffaele Sommese, Gautam Akiwate, Antonia Affinito, Moritz Müller, Mattijs Jonker, and KC Claffy.** 2024. 
+**DarkDNS: Revisiting the Value of Rapid Zone Update.** 
+In *Proceedings of the 2024 ACM Internet Measurement Conference (IMC '24)*, November 4–6, 2024, Madrid, Spain. 
+https://doi.org/10.1145/3646547.3689021
 
-**Why Real-Time Detection Matters**:
-- Certificate Transparency logs provide immediate visibility
-- Machine learning can identify suspicious patterns instantly
-- Proactive blocking prevents attacks before domains are actively exploited
-- Fills a critical gap in DNS abuse monitoring
+**Key Findings from the Paper** (Nov 2023 - Jan 2024, 3-month study):
+
+- 📊 **68,042 transient domains** identified
+- ✅ **42,358 confirmed** transient domains (after RDAP validation)
+- ⏱️ **>50% disappear within 6 hours** of registration
+- 🔍 **At least 1%** of all newly registered domains are transient
+- 👻 **Completely invisible** to ICANN's CZDS daily zone snapshots
+- 🚨 **Only 5% flagged** by blocklists, and **94% of those only after deletion**
+- 📉 **Only ~30% detection rate** even with best available public data (compared to registry ground truth)
+- 🌍 **Top TLDs**: .com (41,192), .online (6,159), .site (3,849), .net (3,112)
+- 🏢 **Top registrars**: GoDaddy (19%), Hostinger (15%), NameCheap (10%)
+
+**Critical Insight**: 
+> "Malicious actors exploit the DNS namespace to launch spam campaigns, phishing attacks, malware, and other harmful activities. However, a remarkably high concentration of malicious activity is associated with domains that do not live long enough to make it into daily snapshots."
+> 
+> — Sommese et al., DarkDNS (IMC 2024)
+
+**Why Real-Time Pre-Screening Matters**:
+- Certificate Transparency logs provide immediate visibility (within seconds to minutes)
+- ML-based pre-screening can flag suspicious patterns instantly
+- Provides candidate list for zone monitoring systems to confirm transience
+- Enables prioritized investigation of high-risk domains
+- Fills a critical first layer in the detection pipeline
+
+**Transient Domain Landscape** (from 3-month study):
+- **Lifespan**: >50% deleted within first 6 hours
+- **Top registrars**: GoDaddy (19%), Hostinger (15%), NameCheap (10%)
+- **Top TLDs**: .com (60%), .online (9%), .site (6%)
+- **Hosting**: 50% use Cloudflare nameservers, 35% use Cloudflare CDN
+- **Malicious intent**: Registrars confirm "mostly likely malicious" with rare legitimate exceptions (domain tasting, cancellation)
 
 ### Technologies & Resources
 
@@ -846,13 +932,22 @@ This project uses a pre-trained Random Forest model from:
 - Original model trained on Mendeley's Benign and Malicious Domains Dataset
 - Utilizes 33 comprehensive features for domain classification
 
-### Data Source
+### Research & Data Sources
+
+- **DarkDNS Paper** - Primary research inspiration
+  - Sommese, R., Akiwate, G., Affinito, A., Müller, M., Jonker, M., & Claffy, K. (2024)
+  - *DarkDNS: Revisiting the Value of Rapid Zone Update*
+  - IMC '24, November 4–6, 2024, Madrid, Spain
+  - https://doi.org/10.1145/3646547.3689021
+  - Quantified the transient domain problem and demonstrated the visibility gap
 
 - **[OpenINTEL ZoneStream](https://openintel.nl/data/zonestream/)** - Real-time streaming of newly registered domains
   - Developed by the **University of Twente's OpenINTEL project**
+  - Public feed released by the DarkDNS research team
   - Provides Kafka stream of domains extracted from Certificate Transparency logs
   - Enables real-time monitoring of DNS zone changes for security research
   - Essential data source that makes this real-time detection system possible
+
 - **[Mendeley Dataset](https://data.mendeley.com/datasets/623sshkdrz/5)** - Benign and malicious domain training data
 
 ### Technologies
